@@ -222,45 +222,54 @@ local function sendWebhook(allBrainrots, jobId)
 end
 
 local function ServerHop()
-    -- ULTRA FAST HOP (Ascending Order = Faster API Response)
+    print("🦘 HOP: Starting Fast Search...")
     local PlaceId = game.PlaceId
     local TeleportService = game:GetService("TeleportService")
     local req = http_request or request or (syn and syn.request)
-    local Seen = {}
-
-    print("🚀 HOPPING: Requesting Server List...")
-
+    
+    local StartTime = tick()
+    
     while true do
-        -- SortOrder=Asc: Returns empty servers first (instant find)
-        -- Limit=10: Small packet size for speed
-        -- CacheBuster: math.random() to prevent 1-second caching delays
-        local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=10&_t=" .. math.random(1, 1000000)
+        -- Timeout Fallback: If API stuck for 6s, force standard teleport
+        if (tick() - StartTime) > 6 then
+            warn("⚠️ HOP TIMEOUT: Using Standard Teleport Fallback!")
+            TeleportService:Teleport(PlaceId, Players.LocalPlayer)
+            task.wait(5)
+        end
+
+        local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Desc&limit=15&excludeFullGames=true&_t=" .. math.random(1,100000)
         
         task.spawn(function()
-            local success, result = pcall(function()
-                if req then 
-                    local r = req({Url = url, Method = "GET"})
-                    return r and HttpService:JSONDecode(r.Body)
-                else
-                    return HttpService:JSONDecode(game:HttpGet(url))
-                end
+            local success, raw = pcall(function()
+                if req then return req({Url = url, Method = "GET"}) end
+                return nil
             end)
 
-            if success and result and result.data then
-                -- Try random candidate
-                local candidates = result.data
-                if #candidates > 0 then
-                    local target = candidates[math.random(#candidates)]
-                    if target.id ~= game.JobId and not Seen[target.id] and target.playing < target.maxPlayers then
-                        Seen[target.id] = true
-                        print("⚡ FOUND SERVER: " .. target.id .. " | PLRS: " .. target.playing)
+            if success and raw then
+                if raw.StatusCode == 429 then
+                    warn("❌ RATE LIMITED (429)! Retrying...")
+                    return
+                end
+
+                local result = HttpService:JSONDecode(raw.Body)
+                if result and result.data then
+                    local candidates = {}
+                    for _, server in ipairs(result.data) do
+                        if server.playing < server.maxPlayers and server.id ~= game.JobId then
+                            table.insert(candidates, server)
+                        end
+                    end
+                    
+                    if #candidates > 0 then
+                        local target = candidates[math.random(#candidates)]
+                        print("⚡ TARGET FOUND: " .. target.id)
                         TeleportService:TeleportToPlaceInstance(PlaceId, target.id, Players.LocalPlayer)
                         return
                     end
                 end
             end
         end)
-        task.wait(0.2) 
+        task.wait(0.3)
     end
 end
 
