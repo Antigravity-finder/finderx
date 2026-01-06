@@ -1,0 +1,327 @@
+-- CONFIG
+getgenv().webhook = "https://discord.com/api/webhooks/1453964506651951226/T5-PVupD9cVkY-Y0pJyCcGjZR9ihEIgtYnKNtpPLB8eDCEIJFvM0X1CZwf9qtkQSAnbM"
+getgenv().publicWebhook = "https://discord.com/api/webhooks/1457619420514881739/NVp3p6I5Tk0YQn_hFiC5cSZUDwiJDfe16yePzB0K8cRUc87p9BIRQYWKFurbVYM3ZqAS"
+getgenv().websiteEndpoint = "https://sender-five-ochre.vercel.app/"
+
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local Workspace = game:GetService("Workspace")
+
+
+-- 🔢 Convierte "1.2M", "500K" etc a número
+local function parseValueFromText(text)
+    local num, unit = string.match(text, "([%d%.]+)([KM]?)")
+    if not num then return 0 end
+    num = tonumber(num) or 0
+    if unit == "K" then
+        num = num * 1000
+    elseif unit == "M" then
+        num = num * 1000000
+    end
+    return num
+end
+
+-- 🥇 FUNCION QUE DEVUELVE TODOS LOS BRAINROTS
+local function getAllBrainrots()
+    local debris = Workspace:FindFirstChild("Debris")
+    if not debris then return {} end
+
+    local all = {}
+
+    for _, obj in ipairs(debris:GetDescendants()) do
+        if obj.Name == "FastOverheadTemplate" then
+            local gui = obj:FindFirstChildWhichIsA("BillboardGui", true) 
+                      or obj:FindFirstChildWhichIsA("SurfaceGui", true)
+            
+            if gui then
+                local name = gui:FindFirstChild("DisplayName", true)
+                local gen = gui:FindFirstChild("Generation", true)
+                
+                if name and gen and gen.Text then
+                    local value = parseValueFromText(gen.Text)
+                    table.insert(all, { name = name.Text, value = value, valueText = gen.Text })
+                end
+            end
+        end
+    end
+
+    -- Ordenar de mayor a menor
+    table.sort(all, function(a, b) return a.value > b.value end)
+    
+    return all
+end
+
+-- 🖼️ OBTENER IMAGEN DE LA WIKI
+local function getBrainrotImage(name)
+    local fileName = string.gsub(name, " ", "_")
+    local apiUrl = "https://stealabrainrot.fandom.com/api.php?action=query&titles=File:" .. fileName .. ".png&prop=imageinfo&iiprop=url&format=json"
+
+    local req = http_request or request or (syn and syn.request)
+    if not req then return "https://i.imgur.com/4M34hi2.png" end 
+
+    local success, response = pcall(function()
+        return req({Url = apiUrl, Method = "GET"})
+    end)
+
+    if success and response.Body then
+        local data = HttpService:JSONDecode(response.Body)
+        if data and data.query and data.query.pages then
+            for _, page in pairs(data.query.pages) do
+                if page.imageinfo and page.imageinfo[1] then
+                    return page.imageinfo[1].url
+                end
+            end
+        end
+    end
+
+    return "https://i.imgur.com/4M34hi2.png" 
+end
+
+-- SEND TO WEBHOOK
+local function sendWebhook(allBrainrots, jobId)
+    if #allBrainrots == 0 then return end
+    local best = allBrainrots[1] -- First is best
+
+    local joinScript = string.format(
+        'game:GetService("TeleportService"):TeleportToPlaceInstance(%d, "%s")',
+        game.PlaceId,
+        jobId
+    )
+    
+    local link = string.format("https://www.roblox.com/games/start?placeId=%d&jobId=%s", game.PlaceId, jobId)
+    local imageUrl = getBrainrotImage(best.name)
+
+    -- Format other brainrots list
+    local listText = ""
+    for i = 2, #allBrainrots do
+        if i > 16 then break end
+        local br = allBrainrots[i]
+        listText = listText .. string.format("- %s (%s)\n", br.name, br.valueText)
+    end
+    
+    if listText == "" then listText = "None extra" end
+
+    -- Embed Design
+    local embed = {
+        ["title"] = "BRAINROT FOUND!",
+        ["url"] = link,
+        ["description"] = string.format("**%s** has been spotted!\n\n> **Value:** `%s`\n> **Players:** `%d/%d`", best.name, best.valueText, #Players:GetPlayers(), Players.MaxPlayers),
+        ["color"] = 10181110, -- Purple
+        ["thumbnail"] = {
+            ["url"] = imageUrl
+        },
+
+        ["fields"] = {
+            {
+                ["name"] = "Server Overview",
+                ["value"] = "```ini\n" .. listText .. "\n```",
+                ["inline"] = false
+            },
+            {
+                ["name"] = "Quick Actions",
+                ["value"] = string.format("[**LAUNCH ROBLOX**](%s)", link),
+                ["inline"] = true
+            },
+            {
+                ["name"] = "Copy Script",
+                ["value"] = "```lua\n" .. joinScript .. "\n```",
+                ["inline"] = false
+            }
+        },
+        ["footer"] = {
+            ["text"] = "ANTIGRAVITY FINDER - " .. os.date("%X"),
+            ["icon_url"] = "https://i.imgur.com/4M34hi2.png"
+        },
+        ["timestamp"] = os.date("!%Y-%m-%dT%H:%M:%SZ")
+    }
+
+    local payload = HttpService:JSONEncode({
+        username = "Brainrot Notify",
+        avatar_url = "https://i.imgur.com/4M34hi2.png",
+        embeds = {embed},
+        bestBrainrot = best,
+        jobId = jobId
+    })
+
+    local req = http_request or request or (syn and syn.request)
+    if not req then return end
+
+    local successWebhook, errWebhook = pcall(function()
+        req({
+            Url = getgenv().webhook,
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = payload
+        })
+    end)
+    if not successWebhook then warn("Webhook Error: " .. tostring(errWebhook)) end
+
+    local successApi, errApi = pcall(function()
+        req({
+            Url = getgenv().websiteEndpoint,
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json",
+                ["Authorization"] = "h"
+            },
+            Body = payload
+        })
+    end)
+    if not successApi then warn("API Error: " .. tostring(errApi)) end
+
+    -- PUBLIC PREVIEW WEBHOOK (NO LINKS)
+    if getgenv().publicWebhook then
+        local publicEmbed = {
+            ["title"] = "PREVIEW: ITEM FOUND",
+            ["description"] = string.format("**%s** has been detected!\n\n> **Value:** `%s`", best.name, best.valueText),
+            ["color"] = 16776960, -- Gold (Preview)
+            ["thumbnail"] = {
+                ["url"] = imageUrl
+            },
+            ["fields"] = {
+                {
+                    ["name"] = "Loot Overview",
+                    ["value"] = "```ini\n" .. listText .. "\n```",
+                    ["inline"] = false
+                },
+                {
+                    ["name"] = "Status",
+                    ["value"] = "Link Hidden (Proof Only)",
+                    ["inline"] = true
+                }
+            },
+            ["footer"] = {
+                ["text"] = "Antigravity Finder - Public Log",
+                ["icon_url"] = "https://i.imgur.com/4M34hi2.png"
+            },
+            ["timestamp"] = os.date("!%Y-%m-%dT%H:%M:%SZ")
+        }
+
+        local publicPayload = HttpService:JSONEncode({
+            username = "Finder Proof",
+            avatar_url = "https://i.imgur.com/4M34hi2.png",
+            embeds = {publicEmbed}
+        })
+
+        task.spawn(function()
+            pcall(function()
+                req({
+                    Url = getgenv().publicWebhook,
+                    Method = "POST",
+                    Headers = {["Content-Type"] = "application/json"},
+                    Body = publicPayload
+                })
+            end)
+        end)
+    end
+end
+
+-- 🦘 SERVER HOP FUNCTION (INSTANT)
+local function ServerHop()
+    print("🦘 INSTANT HOP: Initializing...")
+    local PlaceId = game.PlaceId
+    local TeleportService = game:GetService("TeleportService")
+    local req = http_request or request or (syn and syn.request)
+    
+    local cursor = ""
+    local visited = {}
+    
+    -- Request configuration
+    local limit = 100
+    
+    while true do
+        local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Desc&limit=" .. limit .. "&excludeFullGames=true"
+        if cursor ~= "" then url = url .. "&cursor=" .. cursor end
+        
+        task.spawn(function() -- Background fetch to not block if we loop back
+            local success, result = pcall(function()
+                if req then 
+                    local r = req({Url = url, Method = "GET"})
+                    return r and HttpService:JSONDecode(r.Body)
+                else
+                    return HttpService:JSONDecode(game:HttpGet(url))
+                end
+            end)
+
+            if success and result and result.data then
+                local candidates = {}
+                for _, server in ipairs(result.data) do
+                    -- Filtro estricto: Que tenga espacio real (max - 1 al menos)
+                    if server.playing < server.maxPlayers and server.id ~= game.JobId and not visited[server.id] then
+                        table.insert(candidates, server)
+                    end
+                end
+                
+                if #candidates > 0 then
+                    -- Shuffle simple
+                    for i = #candidates, 2, -1 do
+                        local j = math.random(i)
+                        candidates[i], candidates[j] = candidates[j], candidates[i]
+                    end
+                    
+                    -- INTENTO DE TELEPORT MASIVO / RÁPIDO
+                    for _, server in ipairs(candidates) do
+                        visited[server.id] = true
+                        -- No print para no laggear consola
+                        pcall(function()
+                            TeleportService:TeleportToPlaceInstance(PlaceId, server.id, Players.LocalPlayer)
+                        end)
+                        task.wait(0.2) -- Casi instantáneo
+                    end
+                end
+                
+                if result.nextPageCursor then
+                    cursor = result.nextPageCursor
+                else
+                    cursor = ""
+                end
+            end
+        end)
+        
+        task.wait(0.5) -- Small delay before potentially sending another request if the first one yields nothing or we burn through candidates
+    end
+end
+
+-- 🔁 LOOP PRINCIPAL
+-- Control para evitar múltiples ejecuciones simultáneas y spam al re-ejecutar
+if getgenv().BrainrotFinderLoop then
+    getgenv().BrainrotFinderStop = true
+    task.wait(2) -- Esperar a que el loop anterior se detenga
+end
+
+getgenv().BrainrotFinderStop = false
+getgenv().BrainrotFinderLoop = true
+
+task.spawn(function()
+    while not getgenv().BrainrotFinderStop do
+        local all = getAllBrainrots()
+        if #all > 0 then
+            local best = all[1]
+            local last = getgenv().LastBrainrotSent
+            
+            -- Verificar si es el mismo MEJOR brainrot que ya se envió
+            local isSame = last and 
+                           last.name == best.name and 
+                           last.value == best.value and 
+                           last.jobId == game.JobId
+
+            if not isSame then
+                if best.value >= 10000000 then -- Minimo 10M
+                    print("🥇 Mejor brainrot local:", best.name, "Value:", best.value)
+                    sendWebhook(all, game.JobId) -- Enviamos TODA la lista
+                    
+                    getgenv().LastBrainrotSent = {
+                        name = best.name, 
+                        value = best.value, 
+                        jobId = game.JobId 
+                    }
+                else
+                     print("📉 Skip: " .. best.name .. " (" .. best.valueText .. ") es menor a 10M")
+                end
+            end
+        end
+        task.wait(3)
+        ServerHop()
+    end
+    getgenv().BrainrotFinderLoop = false
+end)
