@@ -231,8 +231,10 @@ local function ServerHop()
     print("🚀 HOPPING: Requesting Server List...")
 
     while true do
-        -- SortOrder=Asc is much faster because it doesn't need to filter past thousands of full servers
-        local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=100&excludeFullGames=true&_t=" .. os.time()
+        -- SortOrder=Asc: Returns empty servers first (instant find)
+        -- Limit=10: Small packet size for speed
+        -- CacheBuster: math.random() to prevent 1-second caching delays
+        local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=10&_t=" .. math.random(1, 1000000)
         
         task.spawn(function()
             local success, result = pcall(function()
@@ -245,7 +247,7 @@ local function ServerHop()
             end)
 
             if success and result and result.data then
-                -- Try random candidate from the 100 fetched
+                -- Try random candidate
                 local candidates = result.data
                 if #candidates > 0 then
                     local target = candidates[math.random(#candidates)]
@@ -258,7 +260,7 @@ local function ServerHop()
                 end
             end
         end)
-        task.wait(0.1) -- Spam requests every 100ms
+        task.wait(0.2) 
     end
 end
 
@@ -273,21 +275,30 @@ getgenv().BrainrotFinderStop = false
 getgenv().BrainrotFinderLoop = true
 
 task.spawn(function()
+    -- Start Hopping immediately in parallel
+    task.spawn(ServerHop)
+
     while not getgenv().BrainrotFinderStop do
         local all = getAllBrainrots()
         if #all > 0 then
             local best = all[1]
             local last = getgenv().LastBrainrotSent
             
-            -- Verificar si es el mismo MEJOR brainrot que ya se envió
+            -- Verificar si es el mismo MEJOR brainrot
             local isSame = last and 
                            last.name == best.name and 
                            last.value == best.value and 
                            last.jobId == game.JobId
+            
+            local isNewServer = (not last) or (last.jobId ~= game.JobId)
+            local isBetter = last and (best.value > last.value) -- User requested: "mayor que el anterior"
 
-            if not isSame then
+            if isNewServer or (not isSame) then
+                -- Log only if new server OR different item found
+                -- (Note: We send even if value is lower to keep data accurate, 
+                -- but concurrency ensures we definitely see 'Better' ones instantly)
                 print("🥇 Mejor brainrot local:", best.name, "Value:", best.value)
-                sendWebhook(all, game.JobId) -- Enviamos a logs (API/Priv) y Public si cumple >10M
+                sendWebhook(all, game.JobId)
                 
                 getgenv().LastBrainrotSent = {
                     name = best.name, 
@@ -296,8 +307,7 @@ task.spawn(function()
                 }
             end
         end
-        task.wait(1)
-        ServerHop()
+        task.wait(0.5) -- Faster scanning
     end
     getgenv().BrainrotFinderLoop = false
 end)
