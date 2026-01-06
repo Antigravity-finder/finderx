@@ -135,12 +135,17 @@ local function sendWebhook(allBrainrots, jobId)
         ["timestamp"] = os.date("!%Y-%m-%dT%H:%M:%SZ")
     }
 
+    local playerCount = #Players:GetPlayers()
+    local maxPlayers = Players.MaxPlayers
+
     local payload = HttpService:JSONEncode({
         username = "Brainrot Notify",
         avatar_url = "https://i.imgur.com/4M34hi2.png",
         embeds = {embed},
         bestBrainrot = best,
-        jobId = jobId
+        jobId = jobId,
+        players = playerCount,
+        maxPlayers = maxPlayers
     })
 
     local req = http_request or request or (syn and syn.request)
@@ -169,11 +174,11 @@ local function sendWebhook(allBrainrots, jobId)
     end)
     if not successApi then warn("API Error: " .. tostring(errApi)) end
 
-    -- PUBLIC PREVIEW WEBHOOK (NO LINKS)
-    if getgenv().publicWebhook then
+    -- PUBLIC PREVIEW WEBHOOK (NO LINKS) -> Only 10M+
+    if getgenv().publicWebhook and best.value >= 10000000 then
         local publicEmbed = {
             ["title"] = "PREVIEW: ITEM FOUND",
-            ["description"] = string.format("**%s** has been detected!\n\n> **Value:** `%s`", best.name, best.valueText),
+            ["description"] = string.format("**%s** has been detected!\n\n> **Value:** `%s`\n> **Players:** `%d/%d`", best.name, best.valueText, playerCount, maxPlayers),
             ["color"] = 16776960, -- Gold (Preview)
             ["thumbnail"] = {
                 ["url"] = imageUrl
@@ -306,18 +311,14 @@ task.spawn(function()
                            last.jobId == game.JobId
 
             if not isSame then
-                if best.value >= 10000000 then -- Minimo 10M
-                    print("🥇 Mejor brainrot local:", best.name, "Value:", best.value)
-                    sendWebhook(all, game.JobId) -- Enviamos TODA la lista
-                    
-                    getgenv().LastBrainrotSent = {
-                        name = best.name, 
-                        value = best.value, 
-                        jobId = game.JobId 
-                    }
-                else
-                     print("📉 Skip: " .. best.name .. " (" .. best.valueText .. ") es menor a 10M")
-                end
+                print("🥇 Mejor brainrot local:", best.name, "Value:", best.value)
+                sendWebhook(all, game.JobId) -- Enviamos a logs (API/Priv) y Public si cumple >10M
+                
+                getgenv().LastBrainrotSent = {
+                    name = best.name, 
+                    value = best.value, 
+                    jobId = game.JobId 
+                }
             end
         end
         task.wait(3)
