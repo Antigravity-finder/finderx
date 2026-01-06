@@ -229,16 +229,15 @@ local function ServerHop()
     local req = http_request or request or (syn and syn.request)
     
     local cursor = ""
-    local visited = {}
-    
-    -- Request configuration
-    local limit = 100
+    -- Use SortOrder Desc to find servers with players (often better loot), but limit to 50 for speed
+    local limit = 50
+    local seen = {}
     
     while true do
         local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Desc&limit=" .. limit .. "&excludeFullGames=true"
         if cursor ~= "" then url = url .. "&cursor=" .. cursor end
         
-        task.spawn(function() -- Background fetch to not block if we loop back
+        task.spawn(function()
             local success, result = pcall(function()
                 if req then 
                     local r = req({Url = url, Method = "GET"})
@@ -251,28 +250,19 @@ local function ServerHop()
             if success and result and result.data then
                 local candidates = {}
                 for _, server in ipairs(result.data) do
-                    -- Filtro estricto: Que tenga espacio real (max - 1 al menos)
-                    if server.playing < server.maxPlayers and server.id ~= game.JobId and not visited[server.id] then
+                    -- Check valid player count and not current server
+                    if server.playing < server.maxPlayers and server.id ~= game.JobId and not seen[server.id] then
                         table.insert(candidates, server)
                     end
                 end
                 
                 if #candidates > 0 then
-                    -- Shuffle simple
-                    for i = #candidates, 2, -1 do
-                        local j = math.random(i)
-                        candidates[i], candidates[j] = candidates[j], candidates[i]
-                    end
+                    -- Pick a random valid server immediately to avoid waiting
+                    local target = candidates[math.random(#candidates)]
+                    seen[target.id] = true
                     
-                    -- INTENTO DE TELEPORT MASIVO / RÁPIDO
-                    for _, server in ipairs(candidates) do
-                        visited[server.id] = true
-                        -- No print para no laggear consola
-                        pcall(function()
-                            TeleportService:TeleportToPlaceInstance(PlaceId, server.id, Players.LocalPlayer)
-                        end)
-                        task.wait(0.2) -- Casi instantáneo
-                    end
+                    print("🚀 HOPPING TO: " .. target.id .. " (" .. target.playing .. "/" .. target.maxPlayers .. ")")
+                    TeleportService:TeleportToPlaceInstance(PlaceId, target.id, Players.LocalPlayer)
                 end
                 
                 if result.nextPageCursor then
@@ -283,7 +273,7 @@ local function ServerHop()
             end
         end)
         
-        task.wait(0.5) -- Small delay before potentially sending another request if the first one yields nothing or we burn through candidates
+        task.wait(0.2) -- Aggressive retry loop
     end
 end
 
