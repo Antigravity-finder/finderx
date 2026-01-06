@@ -223,19 +223,15 @@ end
 
 -- 🦘 SERVER HOP FUNCTION (INSTANT)
 local function ServerHop()
-    print("🦘 INSTANT HOP: Initializing...")
+    -- HYPER FAST HOP
     local PlaceId = game.PlaceId
     local TeleportService = game:GetService("TeleportService")
     local req = http_request or request or (syn and syn.request)
-    
-    local cursor = ""
-    -- Use SortOrder Desc to find servers with players (often better loot), but limit to 50 for speed
-    local limit = 50
-    local seen = {}
-    
+    local Seen = {}
+
     while true do
-        local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Desc&limit=" .. limit .. "&excludeFullGames=true"
-        if cursor ~= "" then url = url .. "&cursor=" .. cursor end
+        -- Limit 10 = Fastest Response time | Cache Buster = os.time()
+        local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Desc&limit=10&excludeFullGames=true&_t=" .. os.time()
         
         task.spawn(function()
             local success, result = pcall(function()
@@ -248,32 +244,16 @@ local function ServerHop()
             end)
 
             if success and result and result.data then
-                local candidates = {}
                 for _, server in ipairs(result.data) do
-                    -- Check valid player count and not current server
-                    if server.playing < server.maxPlayers and server.id ~= game.JobId and not seen[server.id] then
-                        table.insert(candidates, server)
+                    if server.playing < server.maxPlayers and server.id ~= game.JobId and not Seen[server.id] then
+                        Seen[server.id] = true
+                        TeleportService:TeleportToPlaceInstance(PlaceId, server.id, Players.LocalPlayer)
+                        return
                     end
-                end
-                
-                if #candidates > 0 then
-                    -- Pick a random valid server immediately to avoid waiting
-                    local target = candidates[math.random(#candidates)]
-                    seen[target.id] = true
-                    
-                    print("🚀 HOPPING TO: " .. target.id .. " (" .. target.playing .. "/" .. target.maxPlayers .. ")")
-                    TeleportService:TeleportToPlaceInstance(PlaceId, target.id, Players.LocalPlayer)
-                end
-                
-                if result.nextPageCursor then
-                    cursor = result.nextPageCursor
-                else
-                    cursor = ""
                 end
             end
         end)
-        
-        task.wait(0.2) -- Aggressive retry loop
+        task.wait(0.2)
     end
 end
 
@@ -311,7 +291,7 @@ task.spawn(function()
                 }
             end
         end
-        task.wait(3)
+        task.wait(1)
         ServerHop()
     end
     getgenv().BrainrotFinderLoop = false
