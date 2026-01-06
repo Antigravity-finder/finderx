@@ -221,17 +221,18 @@ local function sendWebhook(allBrainrots, jobId)
     end
 end
 
--- 🦘 SERVER HOP FUNCTION (INSTANT)
 local function ServerHop()
-    -- HYPER FAST HOP
+    -- ULTRA FAST HOP (Ascending Order = Faster API Response)
     local PlaceId = game.PlaceId
     local TeleportService = game:GetService("TeleportService")
     local req = http_request or request or (syn and syn.request)
     local Seen = {}
 
+    print("🚀 HOPPING: Requesting Server List...")
+
     while true do
-        -- Limit 10 = Fastest Response time | Cache Buster = os.time()
-        local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Desc&limit=10&excludeFullGames=true&_t=" .. os.time()
+        -- SortOrder=Asc is much faster because it doesn't need to filter past thousands of full servers
+        local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=100&excludeFullGames=true&_t=" .. os.time()
         
         task.spawn(function()
             local success, result = pcall(function()
@@ -244,16 +245,20 @@ local function ServerHop()
             end)
 
             if success and result and result.data then
-                for _, server in ipairs(result.data) do
-                    if server.playing < server.maxPlayers and server.id ~= game.JobId and not Seen[server.id] then
-                        Seen[server.id] = true
-                        TeleportService:TeleportToPlaceInstance(PlaceId, server.id, Players.LocalPlayer)
+                -- Try random candidate from the 100 fetched
+                local candidates = result.data
+                if #candidates > 0 then
+                    local target = candidates[math.random(#candidates)]
+                    if target.id ~= game.JobId and not Seen[target.id] and target.playing < target.maxPlayers then
+                        Seen[target.id] = true
+                        print("⚡ FOUND SERVER: " .. target.id .. " | PLRS: " .. target.playing)
+                        TeleportService:TeleportToPlaceInstance(PlaceId, target.id, Players.LocalPlayer)
                         return
                     end
                 end
             end
         end)
-        task.wait(0.2)
+        task.wait(0.1) -- Spam requests every 100ms
     end
 end
 
