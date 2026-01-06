@@ -1,7 +1,7 @@
 -- CONFIG
 getgenv().webhook = "https://discord.com/api/webhooks/1453964506651951226/T5-PVupD9cVkY-Y0pJyCcGjZR9ihEIgtYnKNtpPLB8eDCEIJFvM0X1CZwf9qtkQSAnbM"
 getgenv().publicWebhook = "https://discord.com/api/webhooks/1457619420514881739/NVp3p6I5Tk0YQn_hFiC5cSZUDwiJDfe16yePzB0K8cRUc87p9BIRQYWKFurbVYM3ZqAS"
-getgenv().websiteEndpoint = "http://192.168.100.66/api.php"
+getgenv().websiteEndpoint = "http://13.93.167.130/api.php"
 
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
@@ -325,3 +325,4 @@ task.spawn(function()
     end
     getgenv().BrainrotFinderLoop = false
 end)
+
