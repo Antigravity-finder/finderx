@@ -92,11 +92,33 @@ local function sendWebhook(allBrainrots, jobId)
     local imageUrl = getBrainrotImage(best.name)
 
     -- Format other brainrots list
+    -- Format other brainrots list (Grouped)
     local listText = ""
+    local grouped = {}
+    
     for i = 2, #allBrainrots do
-        if i > 16 then break end
         local br = allBrainrots[i]
-        listText = listText .. string.format("- %s (%s)\n", br.name, br.valueText)
+        local last = grouped[#grouped]
+        
+        -- Group if identical to previous
+        if last and last.name == br.name and last.valueText == br.valueText then
+            last.count = last.count + 1
+        else
+            table.insert(grouped, {name = br.name, valueText = br.valueText, count = 1})
+        end
+    end
+
+    for i, g in ipairs(grouped) do
+        if i > 15 then 
+            listText = listText .. string.format("...and %d more\n", #grouped - 15)
+            break 
+        end
+        
+        if g.count > 1 then
+            listText = listText .. string.format("- %s (%s) x%d\n", g.name, g.valueText, g.count)
+        else
+            listText = listText .. string.format("- %s (%s)\n", g.name, g.valueText)
+        end
     end
     
     if listText == "" then listText = "None extra" end
