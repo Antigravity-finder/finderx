@@ -297,81 +297,95 @@ local function CheckRemoteVisit(jobId)
 end
 
 local function ServerHop()
-    -- Random delay to desync multiple bots
-    task.wait(math.random(5, 30) / 10) 
+    math.randomseed(tick())
     
-    print("🦘 HOP: Starting Fast Search (Smart & Unique)...")
+    -- Random startup delay to desync multiple bots
+    local startDelay = math.random(10, 50) / 10
+    print(string.format("🦘 HOP: Starting in %.1fs...", startDelay))
+    task.wait(startDelay)
+    
     local PlaceId = game.PlaceId
     local TeleportService = game:GetService("TeleportService")
     local req = http_request or request or (syn and syn.request)
     
     local StartTime = tick()
+    local isHopping = false
     
     while true do
-        -- Fallback: Increased to 20s to give API time to work
-        if (tick() - StartTime) > 20 then
-            warn("⚠️ HOP: Time limit reached, using fallback.")
+        -- Fallback: If stuck for too long
+        if (tick() - StartTime) > 60 then
+            warn("⚠️ HOP: Time limit reached, using vanilla teleport.")
             TeleportService:Teleport(PlaceId, Players.LocalPlayer)
             return
         end
 
-        local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Desc&limit=100&_t=" .. math.random(1,100000)
+        local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Desc&limit=100&excludeFullGames=true&_t=" .. math.random(1,100000)
         
-        task.spawn(function()
-            local success, raw = pcall(function()
-                if req then return req({Url = url, Method = "GET"}) end
-                return nil
-            end)
+        local success, raw = pcall(function()
+            if req then return req({Url = url, Method = "GET"}) end
+            return nil
+        end)
 
-            if success and raw then
-                local result = HttpService:JSONDecode(raw.Body)
-                if result and result.data then
-                    local candidates = {}
-                    for _, server in ipairs(result.data) do
-                        -- Filter: Has space, different ID, AND NOT VISITED LOCALLY
-                        if server.playing < server.maxPlayers and server.id ~= game.JobId and not Visited[server.id] then
-                            table.insert(candidates, server)
-                        end
+        if success and raw and raw.Body then
+            local result = HttpService:JSONDecode(raw.Body)
+            if result and result.data then
+                local candidates = {}
+                for _, server in ipairs(result.data) do
+                    -- Filter: Has space, different ID, AND NOT VISITED LOCALLY
+                    if server.playing < server.maxPlayers and server.id ~= game.JobId and not Visited[server.id] then
+                        table.insert(candidates, server)
+                    end
+                end
+                
+                if #candidates > 0 then
+                    -- SORT BY PLAYER COUNT (DESC)
+                    table.sort(candidates, function(a,b) return a.playing > b.playing end)
+                    
+                    -- Consider Top 10
+                    local topCandidates = {}
+                    for i = 1, math.min(#candidates, 10) do
+                        table.insert(topCandidates, candidates[i])
                     end
                     
-                    if #candidates > 0 then
-                        -- SORT BY PLAYER COUNT (DESC) TO FIND "BEST" SERVERS
-                        table.sort(candidates, function(a,b) return a.playing > b.playing end)
-                        
-                        -- Only consider the Top 15 "Fullest" servers that have space
-                        local topCandidates = {}
-                        for i = 1, math.min(#candidates, 15) do
-                            table.insert(topCandidates, candidates[i])
-                        end
-                        
-                        -- Shuffle the top tier to minimize collisions
-                        for i = #topCandidates, 2, -1 do
-                            local j = math.random(i)
-                            topCandidates[i], topCandidates[j] = topCandidates[j], topCandidates[i]
-                        end
+                    -- Shuffle slightly to avoid perfect sync
+                    local shuffleCount = #topCandidates
+                    for i = shuffleCount, 2, -1 do
+                        local j = math.random(i)
+                        topCandidates[i], topCandidates[j] = topCandidates[j], topCandidates[i]
+                    end
 
-                        -- Try to claim one globally
-                        for _, target in ipairs(topCandidates) do
-                             if CheckRemoteVisit(target.id) then
-                                -- Mark local
-                                Visited[target.id] = os.time()
-                                if writefile then
-                                    pcall(writefile, VISITED_FILE, HttpService:JSONEncode(Visited))
-                                end
-                                
-                                print("⚡ JOINING BEST SERVER (" .. target.playing .. " PLRS): " .. target.id)
-                                TeleportService:TeleportToPlaceInstance(PlaceId, target.id, Players.LocalPlayer)
-                                return -- Exit function immediately
-                             else
-                                -- Collision detected
-                                Visited[target.id] = os.time() 
-                             end
-                        end
+                    -- Try to claim one globally
+                    for _, target in ipairs(topCandidates) do
+                         print("Checking server: " .. target.id .. " (" .. target.playing .. " plrs)")
+                         
+                         if CheckRemoteVisit(target.id) then
+                            -- Mark local & Save
+                            Visited[target.id] = os.time()
+                            if writefile then
+                                pcall(writefile, VISITED_FILE, HttpService:JSONEncode(Visited))
+                            end
+                            
+                            print("⚡ JOINING SECURED SERVER: " .. target.id)
+                            
+                            -- Queue Teleport
+                            TeleportService:TeleportToPlaceInstance(PlaceId, target.id, Players.LocalPlayer)
+                            
+                            -- Wait indefinitely for teleport to happen to prevent re-looping
+                            task.wait(9e9) 
+                            return 
+                         else
+                            -- Collision detected, mark local to skip next time
+                            Visited[target.id] = os.time() 
+                            warn("Collision/Taken: " .. target.id)
+                         end
+                         task.wait(0.1) -- Tiny delay between checks
                     end
                 end
             end
-        end)
-        task.wait(0.5) -- Slower loop to allow API request to finish
+        end
+        
+        -- Retry delay if no server found
+        task.wait(math.random(15, 30) / 10) -- 1.5s - 3s wait
     end
 end
 
