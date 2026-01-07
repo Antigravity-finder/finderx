@@ -167,12 +167,21 @@ local function sendWebhook(allBrainrots, jobId)
     local playerCount = #Players:GetPlayers()
     local maxPlayers = Players.MaxPlayers
 
-    local payload = HttpService:JSONEncode({
+    -- PAYLOAD CONSTRUCTION
+    -- Discord strict payload (Only allowed keys)
+    local discordPayload = HttpService:JSONEncode({
+        username = "Brainrot Notify",
+        avatar_url = "https://i.imgur.com/4M34hi2.png",
+        embeds = {embed}
+    })
+
+    -- API full payload (Includes extra data for tracking)
+    local apiPayload = HttpService:JSONEncode({
         username = "Brainrot Notify",
         avatar_url = "https://i.imgur.com/4M34hi2.png",
         embeds = {embed},
         bestBrainrot = best,
-        allBrainrots = allBrainrots, -- Adding full list
+        allBrainrots = allBrainrots,
         jobId = jobId,
         players = playerCount,
         maxPlayers = maxPlayers,
@@ -182,16 +191,18 @@ local function sendWebhook(allBrainrots, jobId)
     local req = http_request or request or (syn and syn.request)
     if not req then return end
 
+    -- SEND TO DISCORD
     local successWebhook, errWebhook = pcall(function()
         req({
             Url = getgenv().webhook,
             Method = "POST",
             Headers = {["Content-Type"] = "application/json"},
-            Body = payload
+            Body = discordPayload
         })
     end)
     if not successWebhook then warn("Webhook Error: " .. tostring(errWebhook)) end
 
+    -- SEND TO API
     local successApi, errApi = pcall(function()
         req({
             Url = getgenv().websiteEndpoint,
@@ -200,7 +211,7 @@ local function sendWebhook(allBrainrots, jobId)
                 ["Content-Type"] = "application/json",
                 ["Authorization"] = "h"
             },
-            Body = payload
+            Body = apiPayload
         })
     end)
     if not successApi then warn("API Error: " .. tostring(errApi)) end
