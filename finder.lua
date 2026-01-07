@@ -221,8 +221,33 @@ local function sendWebhook(allBrainrots, jobId)
     end
 end
 
+-- 💾 PERSISTENCE (Visited Servers)
+local VISITED_FILE = "visited_servers.json"
+local Visited = {}
+
+local function LoadVisited()
+    -- Try to load existing
+    if isfile and isfile(VISITED_FILE) then
+        local s, r = pcall(readfile, VISITED_FILE)
+        if s and r then
+            pcall(function() Visited = HttpService:JSONDecode(r) end)
+        end
+    end
+    
+    -- Mark current as visited
+    Visited[game.JobId] = os.time()
+    
+    -- Save
+    if writefile then
+        pcall(writefile, VISITED_FILE, HttpService:JSONEncode(Visited))
+    end
+end
+
+-- Initialize
+pcall(LoadVisited)
+
 local function ServerHop()
-    print("🦘 HOP: Starting Fast Search...")
+    print("🦘 HOP: Starting Fast Search (Smart & Unique)...")
     local PlaceId = game.PlaceId
     local TeleportService = game:GetService("TeleportService")
     local req = http_request or request or (syn and syn.request)
@@ -230,14 +255,13 @@ local function ServerHop()
     local StartTime = tick()
     
     while true do
-        -- Fallback: If we haven't found a specific server in 2 seconds, let Roblox handle it.
-        if (tick() - StartTime) > 2 then
-            warn("⚠️ HOP: Using Standard Teleport Fallback (Fastest)")
+        -- Fallback: If we haven't found a UNIQUE server in 3 seconds, let Roblox handle it.
+        if (tick() - StartTime) > 3 then
+            warn("⚠️ HOP: Time limit reached, using fallback.")
             TeleportService:Teleport(PlaceId, Players.LocalPlayer)
-            return -- Stop loop, let teleport happen
+            return
         end
 
-        -- Removing 'excludeFullGames' makes the request 10x faster
         local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Desc&limit=100&_t=" .. math.random(1,100000)
         
         task.spawn(function()
@@ -251,16 +275,23 @@ local function ServerHop()
                 if result and result.data then
                     local candidates = {}
                     for _, server in ipairs(result.data) do
-                        -- Filter locally: Must have space, must not be current server
-                        if server.playing < server.maxPlayers and server.id ~= game.JobId then
+                        -- Filter: Has space, different ID, AND NOT VISITED
+                        if server.playing < server.maxPlayers and server.id ~= game.JobId and not Visited[server.id] then
                             table.insert(candidates, server)
                         end
                     end
                     
                     if #candidates > 0 then
-                        -- Pick random to avoid collision
+                        -- Pick random unique server
                         local target = candidates[math.random(#candidates)]
-                        print("⚡ TARGET FOUND: " .. target.id)
+                        
+                        -- Mark as visited before leaving
+                        Visited[target.id] = os.time()
+                        if writefile then
+                            pcall(writefile, VISITED_FILE, HttpService:JSONEncode(Visited))
+                        end
+                        
+                        print("⚡ UNIQUE TARGET FOUND: " .. target.id)
                         TeleportService:TeleportToPlaceInstance(PlaceId, target.id, Players.LocalPlayer)
                         return
                     end
