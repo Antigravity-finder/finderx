@@ -391,7 +391,7 @@ local function ServerHop()
                 elite[i], elite[j] = elite[j], elite[i]
             end
 
-            -- 4. Fast Attempt Loop
+            -- 4. Fast Attempt Loop (Rapid Fire)
             for _, target in ipairs(elite) do
                 if CheckRemoteVisit(target.id) then
                     Visited[target.id] = os.time()
@@ -399,13 +399,15 @@ local function ServerHop()
                         pcall(writefile, VISITED_FILE, HttpService:JSONEncode(Visited))
                     end
                     
-                    print("⚡ ELITE JOIN: " .. target.id .. " [" .. target.playing .. " Plrs]")
+                    print("⚡ RAPID JOIN: " .. target.id .. " [" .. target.playing .. " Plrs]")
                     
+                    -- Attempt Teleport
+                    -- "Todo junto sin esperar": We try next almost immediately.
+                    -- If this TP works, the script stops. If not, we override it with the next one.
                     TeleportService:TeleportToPlaceInstance(PlaceId, target.id, Players.LocalPlayer)
                     
-                    -- Wait comfortably for TP. If it fails, loop continues next iter.
-                    task.wait(20) 
-                    warn("⚠️ Teleport stalled. Retrying search...")
+                    -- Minimal wait. 2.5s is usually enough for the 'Connecting to Server' screen to start.
+                    task.wait(2.5) 
                 else
                      -- Mark as visited so we don't check again in this session
                      Visited[target.id] = os.time() 
