@@ -363,6 +363,7 @@ local function ServerHop()
             if success and raw and raw.Body then
                 local result = HttpService:JSONDecode(raw.Body)
                 if result and result.data then
+                    lastData = result.data -- Backup for Desperate Jump
                     cursor = result.nextPageCursor
                     
                     for _, server in ipairs(result.data) do
@@ -380,7 +381,7 @@ local function ServerHop()
             
             pagesScanned = pagesScanned + 1
             -- Stop if we have a solid pool of 'Elite' servers or scanned enough
-        until (not cursor) or (#candidates >= 40) or (pagesScanned >= 10)
+        until (not cursor) or (#candidates >= 40) or (pagesScanned >= 4)
 
         -- PROCESS CANDIDATES
         if #candidates > 0 then
@@ -408,24 +409,36 @@ local function ServerHop()
                         pcall(writefile, VISITED_FILE, HttpService:JSONEncode(Visited))
                     end
                     
-                    print("⚡ RAPID JOIN: " .. target.id .. " [" .. target.playing .. " Plrs]")
+                    print("⚡ ELITE JOIN: " .. target.id .. " [" .. target.playing .. " Plrs]")
                     
                     -- Attempt Teleport
                     -- "Todo junto sin esperar": We try next almost immediately.
                     -- If this TP works, the script stops. If not, we override it with the next one.
                     TeleportService:TeleportToPlaceInstance(PlaceId, target.id, Players.LocalPlayer)
                     
-                    -- Minimal wait. 2.5s is usually enough for the 'Connecting to Server' screen to start.
-                    task.wait(2.5) 
+                    -- HYPER FAST TIMEOUT (1.5s)
+                    task.wait(1.5) 
+                    warn("⚠️ Teleport slow. SKIP NEXT...")
                 else
                      -- Mark as visited so we don't check again in this session
                      Visited[target.id] = os.time() 
                 end
             end
         else
-            warn("⚠️ No valid servers found in top pages. Resetting cursor...")
+            warn("⚠️ No Elite Servers. PANIC JUMP (Desperate Mode)...")
+            if lastData then
+                for _, s in ipairs(lastData) do
+                     if s.id ~= game.JobId and s.playing < s.maxPlayers then
+                         warn("🚨 DESPERATE JUMP: " .. s.id)
+                         TeleportService:TeleportToPlaceInstance(PlaceId, s.id, Players.LocalPlayer)
+                         task.wait(1.5)
+                     end
+                end
+            end
+            
+            warn("⚠️ PANIC FAILED. Resetting cursor...")
             cursor = "" -- Reset to start from top
-            task.wait(2)
+            task.wait(1)
         end
         
         task.wait(0.5)
