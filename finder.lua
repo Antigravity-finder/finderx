@@ -193,18 +193,22 @@ local function sendWebhook(allBrainrots, jobId)
 
     -- SEND TO DISCORD
     local successWebhook, errWebhook = pcall(function()
-        req({
+        local r = req({
             Url = getgenv().webhook,
             Method = "POST",
             Headers = {["Content-Type"] = "application/json"},
             Body = discordPayload
         })
+        if r and r.StatusCode then
+            print("📣 Discord Response: " .. r.StatusCode)
+            if r.StatusCode >= 400 then warn("Discord Error Body: " .. tostring(r.Body)) end
+        end
     end)
     if not successWebhook then warn("Webhook Error: " .. tostring(errWebhook)) end
 
     -- SEND TO API
     local successApi, errApi = pcall(function()
-        req({
+        local r = req({
             Url = getgenv().websiteEndpoint,
             Method = "POST",
             Headers = {
@@ -213,6 +217,10 @@ local function sendWebhook(allBrainrots, jobId)
             },
             Body = apiPayload
         })
+        if r and r.StatusCode then
+            print("🌐 API Response: " .. r.StatusCode)
+            if r.StatusCode >= 400 then warn("API Error Body: " .. tostring(r.Body)) end
+        end
     end)
     if not successApi then warn("API Error: " .. tostring(errApi)) end
 
