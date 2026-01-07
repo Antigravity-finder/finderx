@@ -274,6 +274,9 @@ local function CheckRemoteVisit(jobId)
 end
 
 local function ServerHop()
+    -- Random delay to desync multiple bots
+    task.wait(math.random(5, 30) / 10) 
+    
     print("🦘 HOP: Starting Fast Search (Smart & Unique)...")
     local PlaceId = game.PlaceId
     local TeleportService = game:GetService("TeleportService")
@@ -282,8 +285,8 @@ local function ServerHop()
     local StartTime = tick()
     
     while true do
-        -- Fallback: If we haven't found a UNIQUE server in 3 seconds, let Roblox handle it.
-        if (tick() - StartTime) > 3 then
+        -- Fallback: Increased to 20s to give API time to work
+        if (tick() - StartTime) > 20 then
             warn("⚠️ HOP: Time limit reached, using fallback.")
             TeleportService:Teleport(PlaceId, Players.LocalPlayer)
             return
@@ -327,13 +330,16 @@ local function ServerHop()
                                 print("⚡ GLOBALLY UNIQUE TARGET FOUND: " .. target.id)
                                 TeleportService:TeleportToPlaceInstance(PlaceId, target.id, Players.LocalPlayer)
                                 return -- Exit function immediately
+                             else
+                                -- Collision detected
+                                Visited[target.id] = os.time() -- Mark mostly to avoid re-checking in next loop
                              end
                         end
                     end
                 end
             end
         end)
-        task.wait(0.2)
+        task.wait(0.5) -- Slower loop to allow API request to finish
     end
 end
 
