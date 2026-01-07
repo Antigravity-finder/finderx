@@ -175,7 +175,8 @@ local function sendWebhook(allBrainrots, jobId)
         allBrainrots = allBrainrots, -- Adding full list
         jobId = jobId,
         players = playerCount,
-        maxPlayers = maxPlayers
+        maxPlayers = maxPlayers,
+        botName = Players.LocalPlayer.Name
     })
 
     local req = http_request or request or (syn and syn.request)
@@ -291,7 +292,8 @@ local function CheckRemoteVisit(jobId)
             },
             Body = HttpService:JSONEncode({
                 type = "visit",
-                jobId = jobId
+                jobId = jobId,
+                botName = Players.LocalPlayer.Name
             })
         })
     end)
