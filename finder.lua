@@ -319,8 +319,8 @@ end
 local function ServerHop()
     math.randomseed(tick())
     
-    -- ULTRA FAST START: 0.1s - 0.8s delay (Just enough to de-sync threads)
-    local startDelay = math.random(1, 8) / 10
+    -- ULTRA FAST START: 0.1s - 1.5s delay (Just enough to de-sync threads)
+    local startDelay = math.random(1, 15) / 10
     print(string.format("🦘 HOP: Speed Search starting in %.1fs...", startDelay))
     task.wait(startDelay)
     
@@ -331,80 +331,93 @@ local function ServerHop()
     -- Teleport Error Handler
     TeleportService.TeleportInitFailed:Connect(function(player, result, enum, message)
         warn("❌ Teleport Failed: " .. tostring(message))
+        -- Retry logic implicitly handled by loop continuing or script re-executing on fail
     end)
     
-    local StartTime = tick()
+    local cursor = ""
     
     while true do
-        -- Fallback reduced to 90s
-        if (tick() - StartTime) > 90 then
-            warn("⚠️ HOP: Global Time limit, usage vanilla.")
-            TeleportService:Teleport(PlaceId, Players.LocalPlayer)
-            return
-        end
-
-        local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Desc&limit=100&excludeFullGames=true&_t=" .. math.random(1,100000)
+        local candidates = {}
+        local pagesScanned = 0
         
-        local success, raw = pcall(function()
-            if req then return req({Url = url, Method = "GET"}) end
-            return nil
-        end)
-
-        if success and raw and raw.Body then
-            local result = HttpService:JSONDecode(raw.Body)
-            if result and result.data then
-                local candidates = {}
-                for _, server in ipairs(result.data) do
-                    -- Strict Filter: Must have space & not visited
-                    if server.playing < server.maxPlayers and server.id ~= game.JobId and not Visited[server.id] then
-                        table.insert(candidates, server)
+        -- PAGINATION LOOP: Fetch up to 5 pages to find GLOBAL BEST options
+        repeat
+            local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Desc&limit=100&excludeFullGames=true"
+            if cursor and cursor ~= "" then
+                url = url .. "&cursor=" .. cursor
+            end
+            
+            local success, raw = pcall(function()
+                return req({Url = url, Method = "GET"}) 
+            end)
+    
+            if success and raw and raw.Body then
+                local result = HttpService:JSONDecode(raw.Body)
+                if result and result.data then
+                    cursor = result.nextPageCursor
+                    
+                    for _, server in ipairs(result.data) do
+                        -- Strict Check: Must have space, valid ID, and NOT visited
+                        if server.playing < server.maxPlayers and server.id ~= game.JobId and not Visited[server.id] then
+                             table.insert(candidates, server)
+                        end
                     end
+                else
+                    cursor = nil 
                 end
-                
-                if #candidates > 0 then
-                    -- SORT OFFICIALLY BY PLAYERS (Must be descending)
-                    table.sort(candidates, function(a,b) return a.playing > b.playing end)
-                    
-                    -- FOCUS ON THE ELITE: Top 6 only
-                    local topCandidates = {}
-                    for i = 1, math.min(#candidates, 6) do
-                        table.insert(topCandidates, candidates[i])
-                    end
-                    
-                    -- Shuffle ONLY the elite to avoid instant collision
-                    for i = #topCandidates, 2, -1 do
-                        local j = math.random(i)
-                        topCandidates[i], topCandidates[j] = topCandidates[j], topCandidates[i]
-                    end
+            else
+                cursor = nil
+            end
+            
+            pagesScanned = pagesScanned + 1
+            -- Stop if we have a solid pool of 'Elite' servers or scanned enough
+        until (not cursor) or (#candidates >= 20) or (pagesScanned >= 5)
 
-                    -- Rapid Fire Check
-                    for _, target in ipairs(topCandidates) do
-                         -- print("Checking: " .. target.id) -- Commented for speed
-                         
-                         if CheckRemoteVisit(target.id) then
-                            Visited[target.id] = os.time()
-                            if writefile then
-                                pcall(writefile, VISITED_FILE, HttpService:JSONEncode(Visited))
-                            end
-                            
-                            print("⚡ SPEED JOIN: " .. target.id .. " [" .. target.playing .. " Plrs]")
-                            
-                            TeleportService:TeleportToPlaceInstance(PlaceId, target.id, Players.LocalPlayer)
-                            
-                            -- Wait up to 15s for TP to start, then abandon
-                            task.wait(15) 
-                            warn("⚠️ Teleport stalled. Next!")
-                         else
-                            Visited[target.id] = os.time() 
-                         end
-                         -- No wait here! Check next immediately.
+        -- PROCESS CANDIDATES
+        if #candidates > 0 then
+            -- 1. Sort by Player Count (Highest First) - The "Best" servers
+            table.sort(candidates, function(a,b) return a.playing > b.playing end)
+            
+            -- 2. Select the "Elite Few" (Top 5)
+            local elite = {}
+            for i = 1, math.min(#candidates, 5) do
+                table.insert(elite, candidates[i])
+            end
+            
+            -- 3. Shuffle the Elite to avoid Bot Collision (All bots racing for #1)
+            -- This makes them distribute among the top 5 best servers
+            for i = #elite, 2, -1 do
+                local j = math.random(i)
+                elite[i], elite[j] = elite[j], elite[i]
+            end
+
+            -- 4. Fast Attempt Loop
+            for _, target in ipairs(elite) do
+                if CheckRemoteVisit(target.id) then
+                    Visited[target.id] = os.time()
+                    if writefile then
+                        pcall(writefile, VISITED_FILE, HttpService:JSONEncode(Visited))
                     end
+                    
+                    print("⚡ ELITE JOIN: " .. target.id .. " [" .. target.playing .. " Plrs]")
+                    
+                    TeleportService:TeleportToPlaceInstance(PlaceId, target.id, Players.LocalPlayer)
+                    
+                    -- Wait comfortably for TP. If it fails, loop continues next iter.
+                    task.wait(20) 
+                    warn("⚠️ Teleport stalled. Retrying search...")
+                else
+                     -- Mark as visited so we don't check again in this session
+                     Visited[target.id] = os.time() 
                 end
             end
+        else
+            warn("⚠️ No valid servers found in top pages. Resetting cursor...")
+            cursor = "" -- Reset to start from top
+            task.wait(2)
         end
         
-        -- If we failed to find/join any server, wait slightly and retry
-        task.wait(1.2)
+        task.wait(0.5)
     end
 end
 
