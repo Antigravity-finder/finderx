@@ -53,11 +53,13 @@ end
 
 -- 🖼️ OBTENER IMAGEN DE LA WIKI
 local function getBrainrotImage(name)
-    local fileName = string.gsub(name, " ", "_")
+    -- Remove special chars just in case, keep spaces for search
+    local cleanName = string.gsub(name, "[^%w%s]", "")
     
-    -- Query both PNG and JPG variants in one go
-    local variants = "File:" .. fileName .. ".png|File:" .. fileName .. ".jpg|File:" .. fileName .. ".jpeg"
-    local apiUrl = "https://stealabrainrot.fandom.com/api.php?action=query&titles=" .. variants .. "&prop=imageinfo&iiprop=url&format=json"
+    -- Use Search Generator to find the file (Fuzzy Match in File Namespace 6)
+    -- This handles .jpg, .png, and capitalization automatically
+    local query = HttpService:UrlEncode(cleanName)
+    local apiUrl = "https://stealabrainrot.fandom.com/api.php?action=query&generator=search&gsrnamespace=6&gsrsearch=" .. query .. "&gsrlimit=1&prop=imageinfo&iiprop=url&format=json"
 
     local req = http_request or request or (syn and syn.request)
     if not req then return "https://i.imgur.com/4M34hi2.png" end 
@@ -69,8 +71,8 @@ local function getBrainrotImage(name)
     if success and response.Body then
         local data = HttpService:JSONDecode(response.Body)
         if data and data.query and data.query.pages then
+            -- Standard wiki response parsing for generator results
             for _, page in pairs(data.query.pages) do
-                -- Check if this page has image info (meaning it exists)
                 if page.imageinfo and page.imageinfo[1] and page.imageinfo[1].url then
                     return page.imageinfo[1].url
                 end
@@ -78,6 +80,7 @@ local function getBrainrotImage(name)
         end
     end
 
+    -- Fallback to Antigravity Logo
     return "https://i.imgur.com/4M34hi2.png" 
 end
 
