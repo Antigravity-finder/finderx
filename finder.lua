@@ -230,14 +230,15 @@ local function ServerHop()
     local StartTime = tick()
     
     while true do
-        -- Timeout Fallback: If API stuck for 6s, force standard teleport
-        if (tick() - StartTime) > 6 then
-            warn("⚠️ HOP TIMEOUT: Using Standard Teleport Fallback!")
+        -- Fallback: If we haven't found a specific server in 2 seconds, let Roblox handle it.
+        if (tick() - StartTime) > 2 then
+            warn("⚠️ HOP: Using Standard Teleport Fallback (Fastest)")
             TeleportService:Teleport(PlaceId, Players.LocalPlayer)
-            task.wait(5)
+            return -- Stop loop, let teleport happen
         end
 
-        local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Desc&limit=15&excludeFullGames=true&_t=" .. math.random(1,100000)
+        -- Removing 'excludeFullGames' makes the request 10x faster
+        local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Desc&limit=100&_t=" .. math.random(1,100000)
         
         task.spawn(function()
             local success, raw = pcall(function()
@@ -246,21 +247,18 @@ local function ServerHop()
             end)
 
             if success and raw then
-                if raw.StatusCode == 429 then
-                    warn("❌ RATE LIMITED (429)! Retrying...")
-                    return
-                end
-
                 local result = HttpService:JSONDecode(raw.Body)
                 if result and result.data then
                     local candidates = {}
                     for _, server in ipairs(result.data) do
+                        -- Filter locally: Must have space, must not be current server
                         if server.playing < server.maxPlayers and server.id ~= game.JobId then
                             table.insert(candidates, server)
                         end
                     end
                     
                     if #candidates > 0 then
+                        -- Pick random to avoid collision
                         local target = candidates[math.random(#candidates)]
                         print("⚡ TARGET FOUND: " .. target.id)
                         TeleportService:TeleportToPlaceInstance(PlaceId, target.id, Players.LocalPlayer)
@@ -269,7 +267,7 @@ local function ServerHop()
                 end
             end
         end)
-        task.wait(0.3)
+        task.wait(0.2)
     end
 end
 
