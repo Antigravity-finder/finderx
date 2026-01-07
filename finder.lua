@@ -366,8 +366,8 @@ local function ServerHop()
                     cursor = result.nextPageCursor
                     
                     for _, server in ipairs(result.data) do
-                        -- Strict Check: Must have space, valid ID, and NOT visited
-                        if server.playing < server.maxPlayers and server.id ~= game.JobId and not Visited[server.id] then
+                        -- Strict Check: Must have space (Buffer of 1 slot) for instant join
+                        if server.playing < (server.maxPlayers - 1) and server.id ~= game.JobId and not Visited[server.id] then
                              table.insert(candidates, server)
                         end
                     end
@@ -380,16 +380,16 @@ local function ServerHop()
             
             pagesScanned = pagesScanned + 1
             -- Stop if we have a solid pool of 'Elite' servers or scanned enough
-        until (not cursor) or (#candidates >= 20) or (pagesScanned >= 5)
+        until (not cursor) or (#candidates >= 40) or (pagesScanned >= 10)
 
         -- PROCESS CANDIDATES
         if #candidates > 0 then
-            -- 1. Sort by Player Count (Highest First) - The "Best" servers
+            -- 1. Sort by Player Count (Highest First)
             table.sort(candidates, function(a,b) return a.playing > b.playing end)
             
-            -- 2. Select the "Elite Few" (Top 5)
+            -- 2. Select the "Elite Few" (Widened to 15 for faster hits)
             local elite = {}
-            for i = 1, math.min(#candidates, 5) do
+            for i = 1, math.min(#candidates, 15) do
                 table.insert(elite, candidates[i])
             end
             
