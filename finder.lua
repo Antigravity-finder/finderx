@@ -143,6 +143,7 @@ local function sendWebhook(allBrainrots, jobId)
         avatar_url = "https://i.imgur.com/4M34hi2.png",
         embeds = {embed},
         bestBrainrot = best,
+        allBrainrots = allBrainrots, -- Adding full list
         jobId = jobId,
         players = playerCount,
         maxPlayers = maxPlayers
