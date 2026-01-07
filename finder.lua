@@ -303,9 +303,9 @@ end
 local function ServerHop()
     math.randomseed(tick())
     
-    -- Random startup delay to desync multiple bots
-    local startDelay = math.random(10, 50) / 10
-    print(string.format("🦘 HOP: Starting in %.1fs...", startDelay))
+    -- ULTRA FAST START: 0.1s - 0.8s delay (Just enough to de-sync threads)
+    local startDelay = math.random(1, 8) / 10
+    print(string.format("🦘 HOP: Speed Search starting in %.1fs...", startDelay))
     task.wait(startDelay)
     
     local PlaceId = game.PlaceId
@@ -315,16 +315,14 @@ local function ServerHop()
     -- Teleport Error Handler
     TeleportService.TeleportInitFailed:Connect(function(player, result, enum, message)
         warn("❌ Teleport Failed: " .. tostring(message))
-        -- Script will naturally continue in the loop if teleport fails
     end)
     
     local StartTime = tick()
-    local isHopping = false
     
     while true do
-        -- Fallback: If stuck for too long (increased to 120s just in case)
-        if (tick() - StartTime) > 120 then
-            warn("⚠️ HOP: Global Time limit reached, using vanilla teleport.")
+        -- Fallback reduced to 90s
+        if (tick() - StartTime) > 90 then
+            warn("⚠️ HOP: Global Time limit, usage vanilla.")
             TeleportService:Teleport(PlaceId, Players.LocalPlayer)
             return
         end
@@ -341,64 +339,56 @@ local function ServerHop()
             if result and result.data then
                 local candidates = {}
                 for _, server in ipairs(result.data) do
-                    -- Filter: Has space, different ID, AND NOT VISITED LOCALLY
+                    -- Strict Filter: Must have space & not visited
                     if server.playing < server.maxPlayers and server.id ~= game.JobId and not Visited[server.id] then
                         table.insert(candidates, server)
                     end
                 end
                 
                 if #candidates > 0 then
-                    -- SORT BY PLAYER COUNT (DESC)
+                    -- SORT OFFICIALLY BY PLAYERS (Must be descending)
                     table.sort(candidates, function(a,b) return a.playing > b.playing end)
                     
-                    -- Consider Top 10
+                    -- FOCUS ON THE ELITE: Top 6 only
                     local topCandidates = {}
-                    for i = 1, math.min(#candidates, 10) do
+                    for i = 1, math.min(#candidates, 6) do
                         table.insert(topCandidates, candidates[i])
                     end
                     
-                    -- Shuffle slightly
-                    local shuffleCount = #topCandidates
-                    for i = shuffleCount, 2, -1 do
+                    -- Shuffle ONLY the elite to avoid instant collision
+                    for i = #topCandidates, 2, -1 do
                         local j = math.random(i)
                         topCandidates[i], topCandidates[j] = topCandidates[j], topCandidates[i]
                     end
 
-                    -- Try to claim one globally
+                    -- Rapid Fire Check
                     for _, target in ipairs(topCandidates) do
-                         print("Checking server: " .. target.id .. " (" .. target.playing .. " plrs)")
+                         -- print("Checking: " .. target.id) -- Commented for speed
                          
                          if CheckRemoteVisit(target.id) then
-                            -- Mark local & Save
                             Visited[target.id] = os.time()
                             if writefile then
                                 pcall(writefile, VISITED_FILE, HttpService:JSONEncode(Visited))
                             end
                             
-                            print("⚡ JOINING SECURED SERVER: " .. target.id)
+                            print("⚡ SPEED JOIN: " .. target.id .. " [" .. target.playing .. " Plrs]")
                             
-                            -- Queue Teleport
                             TeleportService:TeleportToPlaceInstance(PlaceId, target.id, Players.LocalPlayer)
                             
-                            -- Wait for Teleport (Timeout 20s) instead of forever
-                            -- If teleport happens, script stops naturally.
-                            -- If not, we break and retry.
-                            task.wait(20)
-                            
-                            warn("⚠️ Teleport timed out. Retrying...")
+                            -- Wait up to 15s for TP to start, then abandon
+                            task.wait(15) 
+                            warn("⚠️ Teleport stalled. Next!")
                          else
-                            -- Collision detected, mark local to skip next time
                             Visited[target.id] = os.time() 
-                            warn("Collision/Taken: " .. target.id)
                          end
-                         task.wait(0.1) -- Tiny delay between checks
+                         -- No wait here! Check next immediately.
                     end
                 end
             end
         end
         
-        -- Retry delay if no server found
-        task.wait(math.random(15, 30) / 10)
+        -- If we failed to find/join any server, wait slightly and retry
+        task.wait(1.2)
     end
 end
 
