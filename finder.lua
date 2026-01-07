@@ -335,14 +335,23 @@ local function ServerHop()
                     end
                     
                     if #candidates > 0 then
-                        -- Shuffle locally
-                        for i = #candidates, 2, -1 do
+                        -- SORT BY PLAYER COUNT (DESC) TO FIND "BEST" SERVERS
+                        table.sort(candidates, function(a,b) return a.playing > b.playing end)
+                        
+                        -- Only consider the Top 15 "Fullest" servers that have space
+                        local topCandidates = {}
+                        for i = 1, math.min(#candidates, 15) do
+                            table.insert(topCandidates, candidates[i])
+                        end
+                        
+                        -- Shuffle the top tier to minimize collisions
+                        for i = #topCandidates, 2, -1 do
                             local j = math.random(i)
-                            candidates[i], candidates[j] = candidates[j], candidates[i]
+                            topCandidates[i], topCandidates[j] = topCandidates[j], topCandidates[i]
                         end
 
                         -- Try to claim one globally
-                        for _, target in ipairs(candidates) do
+                        for _, target in ipairs(topCandidates) do
                              if CheckRemoteVisit(target.id) then
                                 -- Mark local
                                 Visited[target.id] = os.time()
@@ -350,12 +359,12 @@ local function ServerHop()
                                     pcall(writefile, VISITED_FILE, HttpService:JSONEncode(Visited))
                                 end
                                 
-                                print("⚡ GLOBALLY UNIQUE TARGET FOUND: " .. target.id)
+                                print("⚡ JOINING BEST SERVER (" .. target.playing .. " PLRS): " .. target.id)
                                 TeleportService:TeleportToPlaceInstance(PlaceId, target.id, Players.LocalPlayer)
                                 return -- Exit function immediately
                              else
                                 -- Collision detected
-                                Visited[target.id] = os.time() -- Mark mostly to avoid re-checking in next loop
+                                Visited[target.id] = os.time() 
                              end
                         end
                     end
